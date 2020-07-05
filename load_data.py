@@ -48,9 +48,11 @@ def load_data(nr_of_channels, batch_size=1, nr_A_train_imgs=None, nr_B_train_img
 def create_image_array(image_list, image_path, nr_of_channels):
     image_array = []
     for image_name in image_list:
-        if image_name[-1].lower() == 'g':  # to avoid e.g. thumbs.db files
+        if image_name[-1].lower() in ('g', 'f'):  # to avoid e.g. thumbs.db files
             if nr_of_channels == 1:  # Gray scale image -> MR image
-                image = np.array(Image.open(os.path.join(image_path, image_name)))
+                loaded_image = Image.open(os.path.join(image_path, image_name))
+                loaded_image = loaded_image.resize((256,256))
+                image = np.array(loaded_image)
                 image = image[:, :, np.newaxis]
             else:                   # RGB image -> street view
                 image = np.array(Image.open(os.path.join(image_path, image_name)))
@@ -108,4 +110,4 @@ class data_sequence(Sequence):
 
 
 if __name__ == '__main__':
-    load_data()
+    load_data(1)

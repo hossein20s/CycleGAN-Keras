@@ -1,5 +1,6 @@
+import imageio
 from keras.layers import Layer, Input, Conv2D, Activation, add, BatchNormalization, UpSampling2D, ZeroPadding2D, Conv2DTranspose, Flatten, MaxPooling2D, AveragePooling2D
-from keras_contrib.layers.normalization import InstanceNormalization, InputSpec
+from keras_contrib.layers.normalization.instancenormalization import InstanceNormalization, InputSpec
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.core import Dense
 from keras.optimizers import Adam
@@ -9,7 +10,7 @@ from keras.utils import plot_model
 from keras.engine.topology import Network
 
 from collections import OrderedDict
-from scipy.misc import imsave, toimage  # has depricated
+# from scipy.misc import imsave, toimage  # has depricated
 import numpy as np
 import random
 import datetime
@@ -28,9 +29,10 @@ import load_data
 
 np.random.seed(seed=12345)
 
+N = 256
 
 class CycleGAN():
-    def __init__(self, lr_D=2e-4, lr_G=2e-4, image_shape=(256*1, 256*1, 1),
+    def __init__(self, lr_D=2e-4, lr_G=2e-4, image_shape=(N*1, N*1, 1),
                  date_time_string_addition='_test', image_folder=''):
         self.img_shape = image_shape
         self.channels = self.img_shape[-1]
@@ -220,13 +222,20 @@ class CycleGAN():
 
         # ======= Avoid pre-allocating GPU memory ==========
         # TensorFlow wizardry
-        config = tf.ConfigProto()
-
+        # config = tf.math.ConfigProto()
         # Don't pre-allocate memory; allocate as-needed
-        config.gpu_options.allow_growth = True
+        # config.gpu_options.allow_growth = True
+
+        gpus = tf.config.experimental.list_physical_devices('GPU')
+        if gpus:
+            try:
+                for gpu in gpus:
+                    tf.config.experimental.set_memory_growth(gpu, True)
+            except RuntimeError as e:
+                print(e)
 
         # Create a session with the above options specified.
-        K.tensorflow_backend.set_session(tf.Session(config=config))
+        # K.tensorflow_backend.set_session(tf.Session(config=config))
 
         # ===== Tests ======
         # Simple Model
@@ -315,7 +324,7 @@ class CycleGAN():
         # Layer 2
         x = self.ck(x, 128, True, 2)
         # Layer 3
-        x = self.ck(x, 256, True, 2)
+        x = self.ck(x, N, True, 2)
         # Layer 4
         x = self.ck(x, 512, True, 1)
         # Output layer
@@ -340,7 +349,7 @@ class CycleGAN():
 
         if self.use_multiscale_discriminator:
             # Layer 3.5
-            x = self.dk(x, 256)
+            x = self.dk(x, N)
 
         # Layer 4-12: Residual layer
         for _ in range(4, 13):
@@ -365,7 +374,7 @@ class CycleGAN():
         inputImg = Input(shape=self.img_shape)
         #x = Conv2D(1, kernel_size=5, strides=1, padding='same')(inputImg)
         #x = Dense(self.channels)(x)
-        x = Conv2D(256, kernel_size=1, strides=1, padding='same')(inputImg)
+        x = Conv2D(N, kernel_size=1, strides=1, padding='same')(inputImg)
         x = Activation('relu')(x)
         x = Conv2D(self.channels, kernel_size=1, strides=1, padding='same')(x)
 
@@ -574,6 +583,7 @@ class CycleGAN():
                 random_order_B = np.random.randint(len(B_train), size=len(B_train))
                 epoch_iterations = max(len(random_order_A), len(random_order_B))
                 min_nr_imgs = min(len(random_order_A), len(random_order_B))
+                real_images_A = real_images_B = None
 
                 # If we want supervised learning the same images form
                 # the two domains are needed during each training iteration
@@ -649,7 +659,7 @@ class CycleGAN():
 # Help functions
 
     def lse(self, y_true, y_pred):
-        loss = tf.reduce_mean(tf.squared_difference(y_pred, y_true))
+        loss = tf.reduce_mean(tf.math.squared_difference(y_pred, y_true))
         return loss
 
     def cycle_loss(self, y_true, y_pred):
@@ -673,7 +683,8 @@ class CycleGAN():
         if self.channels == 1:
             image = image[:, :, 0]
 
-        toimage(image, cmin=-1, cmax=1).save(path_name)
+        # toimage(image, cmin=-1, cmax=1).save(path_name)
+        imageio.imwrite(path_name, image)
 
     def saveImages(self, epoch, real_image_A, real_image_B, num_saved_images=1):
         directory = os.path.join('images', self.date_time)
@@ -846,8 +857,10 @@ class CycleGAN():
             def save_image(image, name, domain):
                 if self.channels == 1:
                     image = image[:, :, 0]
-                toimage(image, cmin=-1, cmax=1).save(os.path.join(
-                    'generate_images', 'synthetic_images', domain, name))
+                path_name = os.path.join(
+                    'generate_images', 'synthetic_images', domain, name)
+                # toimage(image, cmin=-1, cmax=1).save(path_name)
+                imageio.imwrite(path_name, image)
 
             # Test A images
             for i in range(len(synthetic_images_A)):
